@@ -17,5 +17,5 @@ profile
 DerivedData
 .idea/
 *.deb
-_
-obj
+_/
+obj/
