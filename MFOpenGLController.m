@@ -20,7 +20,7 @@ GLfloat postVerts[8];
 
 -(id)initWithFrame:(CGRect)frame{
     if((self = [super init])){
-		NSLog(@"Began loading");
+		NSLog(@"MFLog: ============ New Run ============");
         shaderLoader = [[MFShaderLoader alloc] initWithShaderPath:@"/var/mobile/Library/SpringWallpaper/" name:@"Shader"];
         context = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
         _view = [[GLKView alloc] initWithFrame:frame context:context];
@@ -39,7 +39,8 @@ GLfloat postVerts[8];
     	[springSimulator setSpringImage:image];
     	[springSimulator setGravity:MFVectorMake(0, 0.0)];
     	[springSimulator setDragCoefficient:0.0];
-        [self setupSprings];
+        springData = [[NSMutableDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/SpringWallpaper/coords.plist"] retain];
+        [self resetAnimation];
    		
 		displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(update)];
         displayLink.frameInterval = 1.5;
@@ -48,8 +49,18 @@ GLfloat postVerts[8];
 	return self;
 }
 
+-(void)resetAnimation{
+    [springSimulator removeAllSpringsAndPoints];
+    [self setupSprings];
+    [displayLink setPaused:NO];
+}
+
+-(void)stopAnimation{
+    [displayLink setPaused:YES];
+}
+
 -(void)setupSprings{
-	[springSimulator addSpringPointAtLocation:MFVectorMake(50,50) withVelocity:MFVectorMake(0,0) withMass:1 fixed:NO color:MFVector4Make(1,1,1,1)];
+    [springSimulator importPointsAndSprings:springData];
 }
 
 -(void)setupGL{
@@ -125,7 +136,7 @@ GLfloat postVerts[8];
     //glGetIntegerv(GL_FRAMEBUFFER_BINDING, &defaultFBO);
     //glUseProgram(program);
     //glBindFramebuffer(GL_FRAMEBUFFER, textureFrameBuffer);
-    glClearColor(0.0, 1.0, 0.0, 1.0);
+    glClearColor(0.0, 0.0, 0.0, 0.0);
     glClear(GL_COLOR_BUFFER_BIT);
     
     currentOffset.x += offsetDelta.x;

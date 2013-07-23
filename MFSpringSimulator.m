@@ -9,20 +9,21 @@
 #import "MFSpringSimulator.h"
 #import "MFBatchRenderer.h"
 
+@interface MFSpringSimulator (Private)
+
+-(void)increaseSpringPointArrayToLength:(unsigned)length;
+-(void)increaseSpringArrayToLength:(unsigned)length;
+
+@end
+
 @implementation MFSpringSimulator
 
 -(id)init{
     if((self = [super init])){
-        springPointsArrayLength = BASE_SPRING_POINTS_ARRAY_LENGTH;
-        springArrayLength = BASE_SPRING_ARRAY_LENGTH;
-        springPointsArray = calloc(springPointsArrayLength, sizeof(MFSpringPoint));
-        springsArray = calloc(springArrayLength, sizeof(MFSpring));
+        [self increaseSpringArrayToLength:BASE_SPRING_ARRAY_LENGTH];
+        [self increaseSpringPointArrayToLength:BASE_SPRING_POINTS_ARRAY_LENGTH];
         springCount = 0;
         springPointsCount = 0;
-        for(int x = 0; x < springPointsArrayLength; x++){
-            springPointsArray[x] = EmptySpringPoint();
-            springPointsArray[x].tag = x;
-        }
         gravityAccel = MFVectorMake(0, 0);
         dragCoef = 0.0f;
     }
@@ -31,12 +32,7 @@
 
 -(int)addSpringPointAtLocation:(MFVector)location withVelocity:(MFVector)velocity withMass:(float)mass fixed:(BOOL)fixed color:(MFVector4)color{
     if(springPointsCount + 1 >= springPointsArrayLength){
-        springPointsArrayLength += BASE_SPRING_POINTS_ARRAY_LENGTH;
-        springPointsArray = realloc(springPointsArray, springPointsArrayLength*sizeof(MFSpringPoint));
-        for(int x = springPointsArrayLength-BASE_SPRING_POINTS_ARRAY_LENGTH; x < springPointsArrayLength; x++){
-            springPointsArray[x] = EmptySpringPoint();
-            springPointsArray[x].tag = x;
-        }
+        [self increaseSpringPointArrayToLength:springPointsArrayLength+BASE_SPRING_POINTS_ARRAY_LENGTH];
     }
     for(int x = 0; x < springPointsArrayLength; x++){
         MFSpringPoint s = springPointsArray[x];
@@ -96,8 +92,7 @@
         }
     }
     if(springCount + 1 >= springArrayLength){
-        springArrayLength += BASE_SPRING_ARRAY_LENGTH;
-        springsArray = realloc(springsArray, springArrayLength*sizeof(MFSpring));
+        [self increaseSpringArrayToLength:springArrayLength+BASE_SPRING_ARRAY_LENGTH];
     }
     MFSpring s = EmptySpring();
     s.active = YES;
@@ -114,12 +109,25 @@
     return s.tag;
 }
 
+-(void)removeAllSpringsAndPoints{
+    for(int x = 0; x < springArrayLength; x++){
+        springsArray[x].active = NO;
+    }
+    for(int x = 0; x < springPointsArrayLength; x++){
+        springPointsArray[x].active = NO;
+        for(int y = 0; y < springPointsArray[x].springArrayLength; y++){
+            springPointsArray[x].springs[y] = -1;
+        }
+    }
+    springPointsCount = springCount = 0;
+}
+
 -(void)step{
     CFTimeInterval thisFrame = CACurrentMediaTime();
     CFTimeInterval frameTime = thisFrame - previousFrame;
     previousFrame = thisFrame;
 //    frameTime = 1.0/10.0;
-    if(frameTime > 1.0f/30.0f)
+    if(frameTime > 1.0f/20.0f)
         frameTime = 1.0f/60.0f;
     for(int x = 0; x < springPointsArrayLength; x++){
         MFSpringPoint point = springPointsArray[x];
@@ -206,6 +214,186 @@
 
 -(void)setDragCoefficient:(float)drag{
     dragCoef = drag;
+}
+
+#pragma mark Array util methods
+
+-(void)increaseSpringPointArrayToLength:(unsigned)length{
+    if(length <= springPointsArrayLength)
+        return;
+    int deltaValue = length - springPointsArrayLength;
+    springPointsArrayLength = length;
+    springPointsArray = realloc(springPointsArray, springPointsArrayLength*sizeof(MFSpringPoint));
+    for(int x = springPointsArrayLength-deltaValue; x < springPointsArrayLength; x++){
+        springPointsArray[x] = EmptySpringPoint();
+        springPointsArray[x].tag = x;
+    }
+}
+
+-(void)increaseSpringArrayToLength:(unsigned)length{
+    if(length <= springArrayLength)
+        return;
+    int deltaValue = length - springArrayLength;
+    springArrayLength = length;
+    springsArray = realloc(springsArray, springArrayLength*sizeof(MFSpring));
+    for(int x = springArrayLength-deltaValue; x < springArrayLength; x++){
+        springsArray[x] = EmptySpring();
+        springsArray[x].tag = x;
+    }
+}
+
+#pragma mark Exporting data
+
+MFSpringPointData ConvertMFSpringPointToDataPoint(MFSpringPoint point){
+    MFSpringPointData returnPoint;
+    returnPoint.location = point.location;
+    returnPoint.velocity = point.velocity;
+    returnPoint.mass = point.mass;
+    returnPoint.springArrayCount = point.springArrayCount;
+    returnPoint.springArrayLength = point.springArrayLength;
+    returnPoint.tag = point.tag;
+    returnPoint.color = point.color;
+    returnPoint.fixed = point.fixed;
+    returnPoint.active = point.active;
+    return returnPoint;
+}
+
+-(NSMutableDictionary*)exportCurrentPointsAndSpringsIgnoringVelocity:(BOOL)ignore{
+    NSMutableDictionary *returnDict = [NSMutableDictionary dictionary];
+//    MFSpring *expSprings = calloc(springCount, sizeof(MFSpring));
+    NSMutableArray *expSprings = [[NSMutableArray alloc] init];
+    unsigned expSpringArrayLength = springCount;
+    unsigned expSpringArrayCount = 0;
+    for(int x = 0; x < springArrayLength; x++){
+        MFSpring spring = springsArray[x];
+        if(spring.active && expSpringArrayCount < expSpringArrayLength){
+            NSMutableDictionary *dict = [NSMutableDictionary dictionary];
+            [dict setObject:[NSNumber numberWithInt:spring.springPoint1] forKey:KEY_SPRING_POINT_1];
+            [dict setObject:[NSNumber numberWithInt:spring.springPoint2] forKey:KEY_SPRING_POINT_2];
+            [dict setObject:[NSNumber numberWithFloat:spring.springConstant] forKey:KEY_SPRING_CONSTANT];
+            [dict setObject:[NSNumber numberWithFloat:spring.damperConstant] forKey:KEY_SPRING_DAMPER_CONSTANT];
+            [dict setObject:[NSNumber numberWithFloat:spring.restLength] forKey:KEY_SPRING_REST_LENGTH];
+            [expSprings addObject:dict];
+            expSpringArrayCount++;
+        }
+        else if(spring.active && expSpringArrayCount >= expSpringArrayLength){
+            NSLog(@"Spring count is inaccurate");
+        }
+    }
+    [returnDict setObject:expSprings forKey:KEY_SPRINGS];
+    [expSprings release];
+    
+    NSMutableArray *dataPoints = [[NSMutableArray alloc] init];
+    unsigned dataPointsArrayLength = springPointsCount;
+    unsigned dataPointsArrayCount = 0;
+    for(int x = 0; x < springPointsArrayLength; x++){
+        MFSpringPoint point = springPointsArray[x];
+        if(point.active && dataPointsArrayCount < dataPointsArrayLength){
+            NSMutableDictionary *dictionary = [NSMutableDictionary dictionary];
+            [dictionary setObject:[NSNumber numberWithFloat:point.location.x] forKey:KEY_POINT_LOCATION_X];
+            [dictionary setObject:[NSNumber numberWithFloat:point.location.y] forKey:KEY_POINT_LOCATION_Y];
+            [dictionary setObject:[NSNumber numberWithFloat:ignore?0:point.velocity.x] forKey:KEY_POINT_VELOCITY_X];
+            [dictionary setObject:[NSNumber numberWithFloat:ignore?0:point.velocity.y] forKey:KEY_POINT_VELOCITY_Y];
+            [dictionary setObject:[NSNumber numberWithFloat:point.mass] forKey:KEY_POINT_MASS];
+            [dictionary setObject:[NSNumber numberWithFloat:point.color.x] forKey:KEY_POINT_COLOR_R];
+            [dictionary setObject:[NSNumber numberWithFloat:point.color.y] forKey:KEY_POINT_COLOR_G];
+            [dictionary setObject:[NSNumber numberWithFloat:point.color.z] forKey:KEY_POINT_COLOR_B];
+            [dictionary setObject:[NSNumber numberWithFloat:point.color.w] forKey:KEY_POINT_COLOR_A];
+            [dictionary setObject:[NSNumber numberWithBool:point.fixed] forKey:KEY_POINT_FIXED];
+            [dictionary setObject:[NSNumber numberWithInt:point.tag] forKey:KEY_POINT_TAG];
+            [dataPoints addObject:dictionary];
+            dataPointsArrayCount++;
+        }
+        else if(point.active && dataPointsArrayCount >= dataPointsArrayLength){
+            NSLog(@"Spring points count is inaccurate");
+        }
+    }
+    [returnDict setObject:dataPoints forKey:KEY_POINTS];
+    [dataPoints release];
+    
+    if(expSpringArrayCount != expSpringArrayLength){
+        NSLog(@"Spring array count doesnt exactly fit the length");
+        return nil;
+    }
+    if(dataPointsArrayCount != dataPointsArrayLength){
+        NSLog(@"Spring point array count doesnt exactly fit the length");
+        return nil;
+    }
+    
+    return returnDict;
+}
+
+-(void)importPointsAndSprings:(NSMutableDictionary*)dictionary{
+//    unsigned newPointsCount = [[dictionary objectForKey:KEY_POINTS_COUNT] unsignedIntValue];
+//    unsigned newSpringsCount = [[dictionary objectForKey:KEY_SPRINGS_COUNT] unsignedIntValue];
+    
+//    MFSpring *newSprings = malloc(newSpringsCount*sizeof(MFSpring));
+//    [(NSData*)[dictionary objectForKey:KEY_SPRINGS] getBytes:newSprings length:newSpringsCount*sizeof(MFSpring)];
+//    MFSpringPointData *newPoints = malloc(newPointsCount*sizeof(MFSpringPointData));
+//    [(NSData*)[dictionary objectForKey:KEY_POINTS] getBytes:newPoints length:newPointsCount*sizeof(MFSpringPointData)];
+    NSMutableArray *newSprings = [dictionary objectForKey:KEY_SPRINGS];
+    NSMutableArray *newPoints = [dictionary objectForKey:KEY_POINTS];
+    
+    if(springPointsCount + newPoints.count >= springPointsArrayLength){
+        //need to make the array bigger
+        [self increaseSpringPointArrayToLength:springPointsArrayLength+(int)newPoints.count];
+    }
+    unsigned currentPoint = 0;
+    int *newPointTags = calloc(springPointsArrayLength, sizeof(int));
+    for(int x = 0; x < springPointsArrayLength; x++)
+        newPointTags[x] = x;
+    for(int x = 0; x < springPointsArrayLength; x++){
+        MFSpringPoint point = springPointsArray[x];
+        if(currentPoint >= newPoints.count)
+            break;
+        if(!point.active){
+            NSMutableDictionary *dict = [newPoints objectAtIndex:currentPoint];
+            point.location = MFVectorMake([[dict objectForKey:KEY_POINT_LOCATION_X] floatValue], [[dict objectForKey:KEY_POINT_LOCATION_Y] floatValue]);
+            point.velocity = MFVectorMake([[dict objectForKey:KEY_POINT_VELOCITY_X] floatValue], [[dict objectForKey:KEY_POINT_VELOCITY_Y] floatValue]);
+            point.mass = [[dict objectForKey:KEY_POINT_MASS] floatValue];
+            point.color = MFVector4Make([[dict objectForKey:KEY_POINT_COLOR_R] floatValue], [[dict objectForKey:KEY_POINT_COLOR_G] floatValue], [[dict objectForKey:KEY_POINT_COLOR_B] floatValue], [[dict objectForKey:KEY_POINT_COLOR_A] floatValue]);
+            point.fixed = [[dict objectForKey:KEY_POINT_FIXED] boolValue];
+            point.active = YES;
+            point.springArrayCount = 0;
+            newPointTags[[[dict objectForKey:KEY_POINT_TAG] intValue]] = point.tag;
+            for(int y = 0; y < point.springArrayLength; y++){
+                point.springs[y] = -1;
+            }
+            springPointsArray[x] = point;
+            springPointsCount++;
+            currentPoint++;
+        }
+    }
+    
+    if(springCount + newSprings.count >= springArrayLength){
+        [self increaseSpringArrayToLength:springCount+(int)newSprings.count];
+    }
+    unsigned currentSpring = 0;
+    for(int x = 0; x < springArrayLength; x++){
+        MFSpring spring = springsArray[x];
+        if(currentSpring >= newSprings.count)
+            break;
+        if(spring.active != YES){
+            NSMutableDictionary *dict = [newSprings objectAtIndex:currentSpring];
+            spring.tag = x;
+            spring.active = YES;
+            spring.damperConstant = [[dict objectForKey:KEY_SPRING_DAMPER_CONSTANT] floatValue];
+            spring.springConstant = [[dict objectForKey:KEY_SPRING_CONSTANT] floatValue];
+            spring.restLength = [[dict objectForKey:KEY_SPRING_REST_LENGTH] floatValue];
+            spring.currentLength = 0;
+            spring.springPoint1 = newPointTags[[[dict objectForKey:KEY_SPRING_POINT_1] intValue]];
+            spring.springPoint2 = newPointTags[[[dict objectForKey:KEY_SPRING_POINT_2] intValue]];
+            springPointsArray[spring.springPoint1] = AddSpring(spring.tag, springPointsArray[spring.springPoint1]);
+            springPointsArray[spring.springPoint2] = AddSpring(spring.tag, springPointsArray[spring.springPoint2]);
+            springsArray[x] = spring;
+            currentSpring++;
+            springCount++;
+        }
+    }
+    if(currentSpring < newSprings.count){
+        NSLog(@"didn't finish adding all springs");
+    }
+    free(newPointTags);
 }
 
 #pragma mark Math

@@ -20,4 +20,16 @@ MFOpenGLController *glController;
     return s;
 }
 
+- (void)lockFromSource:(int)arg1 disconnectingCallIfNecessary:(BOOL)arg2{
+    NSLog(@"MFLog: lock called");
+    [glController stopAnimation];
+    %orig;
+}
+
+- (void)restoreIconListAnimated:(BOOL)arg1 delay:(double)arg2 animateWallpaper:(BOOL)arg3 keepSwitcher:(BOOL)arg4{
+    NSLog(@"MFLog: unlock called");
+    [glController resetAnimation];
+    %orig;
+}
+
 %end

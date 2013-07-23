@@ -37,6 +37,8 @@
     MFVector currentOffset;
     MFVector offsetDelta;
 	CFTimeInterval previousFrame;
+    
+    NSMutableDictionary *springData;
 }
 
 @property (nonatomic, retain) GLKView *view;
@@ -44,5 +46,7 @@
 -(void)setupGL;
 -(void)setupSprings;
 -(void)glkView:(GLKView *)view drawInRect:(CGRect)rect;
+-(void)stopAnimation;
+-(void)resetAnimation;
 
 @end
